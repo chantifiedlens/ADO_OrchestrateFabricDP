@@ -3,8 +3,8 @@ trigger:
     include:
     - dev
 variables:
-- group: GIDemoS
-- group: GIDemoNS
+- group: DPDemoS
+- group: DPDemoNS
 pool:
   vmImage: windows-latest
 stages:
