@@ -1,0 +1,128 @@
+trigger:
+  branches:
+    include:
+    - dev
+variables:
+- group: GIDemoS
+- group: GIDemoNS
+pool:
+  vmImage: windows-latest
+stages:
+- stage: Test
+  displayName: Deploy to Test
+  jobs:
+  - deployment: DeployTest
+    environment:
+      name: Test
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: 6d15af64-176c-496d-b583-fd2ae21d4df4@1
+            inputs:
+              repository: self
+          - task: PowerShell@2
+            name: GetFabricToken
+            displayName: Acquire Fabric Token
+            inputs:
+              pwsh: true
+              targetType: inline
+              script: |2
+
+                Write-Host "Requesting Fabric API token..."
+
+                $tenantId = "$(tenantId)"
+                $clientId = "$(servicePrincipalId)"
+                $clientSecret = "$(servicePrincipalKey)"
+
+                $body = @{
+                    client_id     = $clientId
+                    client_secret = $clientSecret
+                    scope         = "https://api.fabric.microsoft.com/.default"
+                    grant_type    = "client_credentials"
+                }
+
+                $tokenResponse = Invoke-RestMethod `
+                    -Uri "https://login.microsoftonline.com/$tenantId/oauth2/v2.0/token" `
+                    -Method POST `
+                    -Body $body `
+                    -ContentType "application/x-www-form-urlencoded"
+
+                $token = $tokenResponse.access_token
+
+                if (-not $token) {
+                    throw "Failed to acquire Fabric token"
+                }
+
+                Write-Host "Token acquired successfully"
+
+                Write-Host "##vso[task.setvariable variable=FABRIC_TOKEN;isOutput=true]$token"
+          - task: PowerShell@2
+            displayName: Deploy Fabric Pipeline
+            inputs:
+              pwsh: true
+              filePath: scripts/DeploymentPipelines-DeployAll_Revised.ps1
+              arguments: >
+                -deploymentPipelineName "$(deploymentPipelineName)" -sourceStageName "$(DevStageName)" -targetStageName "$(TestStageName)" -deploymentNote "$(deploymentNote)"
+            env:
+              FABRIC_TOKEN: $(GetFabricToken.FABRIC_TOKEN)
+- stage: Prod
+  dependsOn:
+  - Test
+  jobs:
+  - deployment: DeployProd
+    environment:
+      name: Production
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: 6d15af64-176c-496d-b583-fd2ae21d4df4@1
+            inputs:
+              repository: self
+          - task: PowerShell@2
+            name: GetFabricToken
+            displayName: Acquire Fabric Token
+            inputs:
+              pwsh: true
+              targetType: inline
+              script: |2
+
+                Write-Host "Requesting Fabric API token..."
+
+                $tenantId = "$(tenantId)"
+                $clientId = "$(servicePrincipalId)"
+                $clientSecret = "$(servicePrincipalKey)"
+
+                $body = @{
+                    client_id     = $clientId
+                    client_secret = $clientSecret
+                    scope         = "https://api.fabric.microsoft.com/.default"
+                    grant_type    = "client_credentials"
+                }
+
+                $tokenResponse = Invoke-RestMethod `
+                    -Uri "https://login.microsoftonline.com/$tenantId/oauth2/v2.0/token" `
+                    -Method POST `
+                    -Body $body `
+                    -ContentType "application/x-www-form-urlencoded"
+
+                $token = $tokenResponse.access_token
+
+                if (-not $token) {
+                    throw "Failed to acquire Fabric token"
+                }
+
+                Write-Host "Token acquired successfully"
+
+                Write-Host "##vso[task.setvariable variable=FABRIC_TOKEN;isOutput=true]$token"
+          - task: PowerShell@2
+            displayName: Deploy Fabric Pipeline
+            inputs:
+              pwsh: true
+              filePath: scripts/DeploymentPipelines-DeployAll_Revised.ps1
+              arguments: >
+                -deploymentPipelineName "$(deploymentPipelineName)" -sourceStageName "$(TestStageName)" -targetStageName "$(ProdStageName)" -deploymentNote "$(deploymentNote)"
+            env:
+              FABRIC_TOKEN: $(GetFabricToken.FABRIC_TOKEN)
+
